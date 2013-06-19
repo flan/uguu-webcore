@@ -1,78 +1,77 @@
 import json
 import uuid
 
-import pylibmc
-
-import mako.lookup
 import tornado.web
 
-_MAKO_TEMPLATES = None
-def init(content_path):
-    global _MAKO_TEMPLATES
-    _MAKO_TEMPLATES = mako.lookup.TemplateLookup(
-     directories=[content_path],
-     module_directory='/tmp/ynga.me/mako_modules',
-     strict_undefined=True,
-    )
+from application import (
+ MAKO_TEMPLATES,
+ COOKIE_DOMAINS,
+ MEMCACHE_POOLS,
+)
     
-def _render(template, kwargs):
-    global _MAKO_TEMPLATES
-    return _MAKO_TEMPLATES.get_template(template + '.mako').render(**kwargs)
-    
-class Session(object):
+class Session(dict):
+    _namespace = None
     _id = None
-    _data = None
+    _data = False
+    _saved = False
     
-    def __init__(self, session_id):
+    def __init__(self, session_id, namespace):
+        dict.__init__(self)
+        self._namespace = namespace
         self._id = session_id
         
+    def __getitem__(self, key):
+        self.load()
+        return dict.__getitem__(self, key)
+        
+    def __setitem__(self, key, value):
+        self.load()
+        return dict.__setitem__(self, key, value)
+        
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+            
     def load(self):
-        if self._data is None:
-            self._data = True #Load it from memcache
-            
+        if not self._data:
+            self.clear()
+            with MEMCACHE_POOLS[self._namespace].reserve() as mc:
+                content = mc.get(self._id)
+                if content:
+                    self.update(json.loads(content))
+            self._data = True
+                    
     def discard(self):
-        if self._data is not None:
-            self._data = None
-            
+        self._data = False
+        
     def save(self):
-        if self._data is not None:
-            #Write it to memcache
-            self._data = None
-            
+        if self._data:
+            with MEMCACHE_POOLS[self._namespace].reserve() as mc:
+                mc.set(self._id, json.dumps(self, separators=(',', ':')))
+                
 class ServiceHandler(tornado.web.RequestHandler):
     """
     Provides common logic, including sessions.
     """
-    _AUTO_SAVE_SESSION = False
-    _AUTO_SAVE_SESSION_ON_ERROR = False
+    _NAMESPACE = None
     _SESSION_ID = None
     
     _session = None
     
     def prepare(self):
         self._SESSION_ID = self.get_cookie('session-id') or uuid.uuid4().hex
-        self.set_cookie('session-id', self._SESSION_ID, domain=)
-
-RequestHandler.set_cookie(name, value, domain=None, expires=None, path='/', expires_days=None, **kwargs)
-        
+        self.set_cookie('session-id', self._SESSION_ID, domain=COOKIE_DOMAINS[self._NAMESPACE])        
         self.content_type = 'text/plain'
-        self._session = Session(self._SESSION_ID) #Prepare a session reference object, but do not request data until needed
-            
-    def on_finish(self):
-        if self._AUTO_SAVE_SESSION:
-            self._session.save()
-            
-    #For cookies, use either self.set_cookie or self._set_secure_cookie
-    #For sessions, use memcache, which needs to be configurable through a command-line option
-    
-    #Expose get/set mechanisms for the session, making cookies transparent.
-    
+        self._session = Session(self._SESSION_ID, self._NAMESPACE)
+        
 class JsonHandler(ServiceHandler):
     """
     Provides structured JSON I/O processing.
     """
     def prepare(self):
-        YngaServiceHandler.prepare(self)
+        ServiceHandler.prepare(self)
         self.content_type = 'application/json'
         
 class PageHandler(ServiceHandler):
@@ -81,22 +80,15 @@ class PageHandler(ServiceHandler):
     """
     _TEMPLATE = '__null'
     
+    def _render(self, template, kwargs):
+        return MAKO_TEMPLATES[self._NAMESPACE].get_template(template + '.mako').render(**kwargs)
+        
     def prepare(self):
-        YngaServiceHandler.prepare(self)
+        ServiceHandler.prepare(self)
         self.content_type = 'text/html'
         
-    def get(self, *args, **kwargs):
-        self.write(_render(self._TEMPLATE, {}))
-        
-    def post(self, *args, **kwargs):
-        self.get()
-        
-class TemplatePageHandler(PageHandler):
-    """
-    Adds generic header/footer formatting, allowing for minimal templates.
-    """
-    def get(self, *args, **kwargs):
-        self.write(_render('header', {}))
-        self.write(_render(self._TEMPLATE, {}))
-        self.write(_render('footer', {}))
+    def _display(self, **kwargs):
+        local = dict((k[2:], getattr(self, k)) for k in dir(self) if k.startswith(('v_', 'm_')))
+        local.update(kwargs)
+        self.write(MAKO_TEMPLATES[self._NAMESPACE].get_template(self._TEMPLATE + '.mako').render(session=self._session, **local))
         

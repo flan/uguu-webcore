@@ -1,7 +1,2 @@
-import handlers
+VERSION = '0.0.1'
 
-def init(content_path):
-    handlers.init(
-        content_path=content_path
-    )
-    
