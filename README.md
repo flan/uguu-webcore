@@ -1,4 +1,4 @@
 uguu-webcore
 ============
 
-A Tornado/Mako-based minimalistic webservice framework
+A Tornado/Memcache/Mako-based webservice framework, intended to spin up prototypes quickly
