@@ -74,6 +74,9 @@ class JsonHandler(ServiceHandler):
         ServiceHandler.prepare(self)
         self.content_type = 'application/json'
         
+    def write(self, data):
+        self.write(json.dumps(data))
+        
 class PageHandler(ServiceHandler):
     """
     Adds Mako-based rendering logic.
