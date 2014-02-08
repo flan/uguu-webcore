@@ -46,6 +46,10 @@ class Session(dict):
     def discard(self):
         self._data = False
         
+    def delete(self):
+        with MEMCACHE_POOLS[self._namespace].reserve() as mc:
+            mc.delete(self._id)
+            
     def save(self):
         if self._data:
             with MEMCACHE_POOLS[self._namespace].reserve() as mc:
