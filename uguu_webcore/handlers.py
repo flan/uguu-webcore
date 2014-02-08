@@ -75,7 +75,7 @@ class JsonHandler(ServiceHandler):
         self.content_type = 'application/json'
         
     def write(self, data):
-        ServiceHandler.write(json.dumps(data))
+        ServiceHandler.write(self, json.dumps(data))
         
 class PageHandler(ServiceHandler):
     """
