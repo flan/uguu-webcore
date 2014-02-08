@@ -88,7 +88,7 @@ class PageHandler(ServiceHandler):
         self.content_type = 'text/html'
         
     def _display(self, **kwargs):
-        local = dict((k[2:], getattr(self, k)) for k in dir(self) if k.startswith(('v_', 'm_')))
+        local = dict((k[2:], getattr(self, k)) for k in dir(self) if k.startswith('t_'))
         local.update(kwargs)
         self.write(MAKO_TEMPLATES[self._NAMESPACE].get_template(self._TEMPLATE + '.mako').render(session=self._session, **local))
         
