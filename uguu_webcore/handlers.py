@@ -83,9 +83,6 @@ class PageHandler(ServiceHandler):
     """
     _TEMPLATE = '__null'
     
-    def _render(self, template, kwargs):
-        return MAKO_TEMPLATES[self._NAMESPACE].get_template(template + '.mako').render(**kwargs)
-        
     def prepare(self):
         ServiceHandler.prepare(self)
         self.content_type = 'text/html'
